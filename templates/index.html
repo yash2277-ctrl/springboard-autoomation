@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Springboard Auto — Course Automation</title>
+    <meta name="description" content="Automate your Infosys Springboard course progression with one click.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* ═══════════════════════════════════════════════════════════
+           DESIGN SYSTEM
+           ═══════════════════════════════════════════════════════════ */
+        :root {
+            --bg-primary: #0a0e17;
+            --bg-secondary: #111827;
+            --bg-card: #1a2035;
+            --bg-card-hover: #1f2847;
+            --bg-input: #0d1424;
+            --border: rgba(99, 102, 241, 0.15);
+            --border-focus: rgba(99, 102, 241, 0.6);
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent: #6366f1;
+            --accent-hover: #818cf8;
+            --accent-glow: rgba(99, 102, 241, 0.25);
+            --success: #22c55e;
+            --success-glow: rgba(34, 197, 94, 0.2);
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --error-glow: rgba(239, 68, 68, 0.2);
+            --gradient-1: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+            --gradient-2: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%);
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --radius-xl: 24px;
+            --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.3), 0 0 0 1px var(--border);
+            --shadow-glow: 0 0 30px var(--accent-glow), 0 0 60px rgba(99, 102, 241, 0.1);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ── Animated background ───────────────────────────────── */
+        .bg-grid {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image:
+                radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(168, 85, 247, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 50% 80%, rgba(14, 165, 233, 0.05) 0%, transparent 50%);
+            z-index: 0;
+        }
+
+        .bg-grid::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: 
+                linear-gradient(rgba(99, 102, 241, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(99, 102, 241, 0.03) 1px, transparent 1px);
+            background-size: 60px 60px;
+        }
+
+        /* ── Layout ────────────────────────────────────────────── */
+        .container {
+            position: relative;
+            z-index: 1;
+            max-width: 640px;
+            margin: 0 auto;
+            padding: 40px 20px 60px;
+        }
+
+        /* ── Header ────────────────────────────────────────────── */
+        .header {
+            text-align: center;
+            margin-bottom: 48px;
+        }
+
+        .logo {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .logo-icon {
+            width: 48px;
+            height: 48px;
+            background: var(--gradient-1);
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            box-shadow: var(--shadow-glow);
+        }
+
+        .logo-text {
+            font-size: 28px;
+            font-weight: 800;
+            background: var(--gradient-1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+
+        .header p {
+            color: var(--text-secondary);
+            font-size: 15px;
+            line-height: 1.6;
+            max-width: 420px;
+            margin: 0 auto;
+        }
+
+        /* ── Card ──────────────────────────────────────────────── */
+        .card {
+            background: var(--bg-card);
+            border-radius: var(--radius-xl);
+            padding: 36px;
+            box-shadow: var(--shadow-card);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border);
+            transition: box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            box-shadow: var(--shadow-card), 0 0 40px rgba(99, 102, 241, 0.05);
+        }
+
+        /* ── Form ──────────────────────────────────────────────── */
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .input-wrapper {
+            position: relative;
+        }
+
+        .input-icon {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 18px;
+            opacity: 0.5;
+            transition: opacity 0.3s;
+        }
+
+        .input-wrapper:focus-within .input-icon {
+            opacity: 1;
+        }
+
+        input[type="email"],
+        input[type="password"],
+        input[type="url"],
+        input[type="text"],
+        select {
+            width: 100%;
+            padding: 14px 16px 14px 46px;
+            background: var(--bg-input);
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius-md);
+            color: var(--text-primary);
+            font-size: 15px;
+            font-family: 'Inter', sans-serif;
+            outline: none;
+            transition: border-color 0.3s, box-shadow 0.3s;
+            appearance: none;
+            -webkit-appearance: none;
+            background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2394a3b8%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+            background-repeat: no-repeat;
+            background-position: right 16px top 50%;
+            background-size: 12px auto;
+        }
+
+        select option {
+            background: var(--bg-card);
+            color: var(--text-primary);
+        }
+
+        input:focus, select:focus {
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 4px var(--accent-glow);
+        }
+
+        input::placeholder {
+            color: var(--text-muted);
+        }
+
+        /* ── Toggle ────────────────────────────────────────────── */
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 16px;
+            background: var(--bg-input);
+            border-radius: var(--radius-md);
+            border: 1.5px solid var(--border);
+            margin-bottom: 28px;
+        }
+
+        .toggle-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .toggle-label span.icon { font-size: 18px; }
+
+        .toggle {
+            position: relative;
+            width: 48px;
+            height: 26px;
+        }
+
+        .toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #374151;
+            border-radius: 26px;
+            transition: 0.3s;
+        }
+
+        .toggle-slider::before {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            left: 3px;
+            bottom: 3px;
+            background: white;
+            border-radius: 50%;
+            transition: 0.3s;
+        }
+
+        .toggle input:checked + .toggle-slider {
+            background: var(--accent);
+        }
+
+        .toggle input:checked + .toggle-slider::before {
+            transform: translateX(22px);
+        }
+
+        /* ── Button ────────────────────────────────────────────── */
+        .btn-primary {
+            width: 100%;
+            padding: 16px;
+            background: var(--gradient-1);
+            color: white;
+            border: none;
+            border-radius: var(--radius-md);
+            font-size: 16px;
+            font-weight: 700;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.3s, opacity 0.3s;
+            box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
+            letter-spacing: 0.3px;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(99, 102, 241, 0.5);
+        }
+
+        .btn-primary:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-stop {
+            width: 100%;
+            padding: 14px;
+            background: var(--error);
+            color: white;
+            border: none;
+            border-radius: var(--radius-md);
+            font-size: 15px;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            margin-top: 12px;
+            transition: background 0.2s;
+            display: none;
+        }
+
+        .btn-stop:hover { background: #dc2626; }
+
+        /* ── Status Badge ──────────────────────────────────────── */
+        .status-bar {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 16px;
+            background: var(--bg-input);
+            border-radius: var(--radius-md);
+            border: 1.5px solid var(--border);
+            margin-bottom: 20px;
+        }
+
+        .status-bar.visible { display: flex; }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--accent);
+            animation: pulse 1.5s infinite;
+        }
+
+        .status-dot.success { background: var(--success); animation: none; }
+        .status-dot.error { background: var(--error); animation: none; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.85); }
+        }
+
+        .status-text {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .module-counter {
+            margin-left: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            color: var(--accent);
+            background: rgba(99, 102, 241, 0.1);
+            padding: 4px 10px;
+            border-radius: 6px;
+        }
+
+        /* ── Log Console ───────────────────────────────────────── */
+        .log-panel {
+            display: none;
+            margin-top: 24px;
+        }
+
+        .log-panel.visible { display: block; }
+
+        .log-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .log-header h3 {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .log-clear {
+            font-size: 12px;
+            color: var(--text-muted);
+            cursor: pointer;
+            background: none;
+            border: none;
+            font-family: inherit;
+            transition: color 0.2s;
+        }
+
+        .log-clear:hover { color: var(--text-primary); }
+
+        .log-console {
+            background: #050810;
+            border-radius: var(--radius-md);
+            border: 1px solid rgba(99, 102, 241, 0.1);
+            padding: 16px;
+            max-height: 450px;
+            overflow-y: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12.5px;
+            line-height: 1.8;
+        }
+
+        .log-console::-webkit-scrollbar { width: 6px; }
+        .log-console::-webkit-scrollbar-track { background: transparent; }
+        .log-console::-webkit-scrollbar-thumb {
+            background: rgba(99, 102, 241, 0.2);
+            border-radius: 3px;
+        }
+
+        .log-line {
+            display: flex;
+            gap: 8px;
+            opacity: 0;
+            animation: fadeIn 0.3s forwards;
+        }
+
+        @keyframes fadeIn {
+            to { opacity: 1; }
+        }
+
+        .log-time {
+            color: var(--text-muted);
+            flex-shrink: 0;
+        }
+
+        .log-icon { flex-shrink: 0; }
+
+        .log-msg { word-break: break-word; }
+
+        .log-line.INFO .log-msg  { color: var(--text-secondary); }
+        .log-line.OK .log-msg    { color: var(--success); }
+        .log-line.WARN .log-msg  { color: var(--warning); }
+        .log-line.ERR .log-msg   { color: var(--error); }
+        .log-line.STOP .log-msg  { color: var(--error); font-weight: 700; }
+        .log-line.VIDEO .log-msg { color: #a78bfa; }
+        .log-line.SCROLL .log-msg{ color: #38bdf8; }
+        .log-line.NEXT .log-msg  { color: #818cf8; }
+        .log-line.QUIZ .log-msg  { color: #f472b6; font-weight: 500; }
+
+        /* ── Footer ────────────────────────────────────────────── */
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        .footer a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        /* ── Features grid ─────────────────────────────────────── */
+        .features {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-top: 32px;
+        }
+
+        .feature {
+            text-align: center;
+            padding: 16px 8px;
+            background: var(--bg-input);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border);
+            transition: border-color 0.3s, transform 0.2s;
+        }
+
+        .feature:hover {
+            border-color: var(--border-focus);
+            transform: translateY(-2px);
+        }
+
+        .feature-icon { font-size: 24px; margin-bottom: 8px; }
+        .feature-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+
+        /* ── Animations ────────────────────────────────────────── */
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .animate-in { animation: slideUp 0.6s ease forwards; }
+        .delay-1 { animation-delay: 0.1s; opacity: 0; }
+        .delay-2 { animation-delay: 0.2s; opacity: 0; }
+        .delay-3 { animation-delay: 0.3s; opacity: 0; }
+
+        /* ── Responsive ────────────────────────────────────────── */
+        @media (max-width: 500px) {
+            .container { padding: 24px 16px 40px; }
+            .card { padding: 24px; }
+            .features { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+            .feature { padding: 12px 6px; }
+            .logo-text { font-size: 22px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-grid"></div>
+
+    <div class="container">
+        <!-- Header -->
+        <header class="header animate-in">
+            <div class="logo">
+                <div class="logo-icon">⚡</div>
+                <span class="logo-text">Springboard Auto</span>
+            </div>
+            <p>Automate your Infosys Springboard courses. Enter your credentials, paste the course URL, and let it run.</p>
+        </header>
+
+        <!-- Main Card -->
+        <div class="card animate-in delay-1">
+            <form id="autoForm">
+                <div class="form-group">
+                    <label for="email">Email Address</label>
+                    <div class="input-wrapper">
+                        <span class="input-icon">📧</span>
+                        <input type="email" id="email" placeholder="you@infosys.com" required autocomplete="email">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <div class="input-wrapper">
+                        <span class="input-icon">🔒</span>
+                        <input type="password" id="password" placeholder="••••••••••" required autocomplete="current-password">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="courseUrl">Select Course</label>
+                    <div class="input-wrapper">
+                        <span class="input-icon">📚</span>
+                        <select id="courseUrl" required>
+                            <option value="" disabled selected>Select a course to automate...</option>
+                            <option value="https://infyspringboard.onwingspan.com/web/en/app/toc/lex_auth_01384203240484864010470_shared/overview">Advanced Data Structures and Algorithms in Python</option>
+                            <option value="https://infyspringboard.onwingspan.com/web/en/app/toc/lex_auth_0127667384693882883448_shared/overview">Data Structures and Algorithms using Python - Part 2</option>
+                            <option value="https://infyspringboard.onwingspan.com/web/en/app/toc/lex_24029875493927956000_shared/overview">Course 3 (lex_240298754939...)</option>
+                            <option value="https://infyspringboard.onwingspan.com/web/en/app/toc/lex_auth_01275806667282022456_shared/overview">Course 4 (lex_auth_01275806...)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="toggle-row">
+                    <div class="toggle-label">
+                        <span class="icon">👁️</span>
+                        <span>Show Browser (recommended for CAPTCHAs)</span>
+                    </div>
+                    <label class="toggle">
+                        <input type="checkbox" id="headedMode" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+
+                <!-- Status Bar -->
+                <div class="status-bar" id="statusBar">
+                    <div class="status-dot" id="statusDot"></div>
+                    <span class="status-text" id="statusText">Initializing...</span>
+                    <span class="module-counter" id="moduleCounter" style="display:none">Module #0</span>
+                </div>
+
+                <button type="submit" class="btn-primary" id="startBtn">
+                    🚀&nbsp; Start Automation
+                </button>
+                <button type="button" class="btn-stop" id="stopBtn">
+                    ⏹&nbsp; Stop Automation
+                </button>
+            </form>
+
+            <!-- Log Console -->
+            <div class="log-panel" id="logPanel">
+                <div class="log-header">
+                    <h3>📋 Live Logs</h3>
+                    <button class="log-clear" id="clearLogs">Clear</button>
+                </div>
+                <div class="log-console" id="logConsole"></div>
+            </div>
+        </div>
+
+        <!-- Features -->
+        <div class="features animate-in delay-2">
+            <div class="feature">
+                <div class="feature-icon">🎬</div>
+                <div class="feature-label">Auto Videos</div>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">📜</div>
+                <div class="feature-label">Auto Scroll</div>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">🚨</div>
+                <div class="feature-label">Quiz Alert</div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer animate-in delay-3">
+            Springboard Auto v2.0 — use responsibly
+        </div>
+    </div>
+
+    <script>
+    /* ═══════════════════════════════════════════════════════════════
+       FRONTEND LOGIC
+       ═══════════════════════════════════════════════════════════════ */
+
+    const ICONS = {
+        INFO:   'ℹ️',  OK:    '✅',  WARN:   '⚠️',
+        ERR:    '❌',  STOP:  '🚨',  VIDEO:  '🎬',
+        SCROLL: '📜',  NEXT:  '➡️',  QUIZ:   '📝',
+    };
+
+    const form       = document.getElementById('autoForm');
+    const startBtn   = document.getElementById('startBtn');
+    const stopBtn    = document.getElementById('stopBtn');
+    const statusBar  = document.getElementById('statusBar');
+    const statusDot  = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+    const moduleCtr  = document.getElementById('moduleCounter');
+    const logPanel   = document.getElementById('logPanel');
+    const logConsole = document.getElementById('logConsole');
+    const clearBtn   = document.getElementById('clearLogs');
+
+    let currentSessionId = null;
+    let eventSource = null;
+    let moduleNum = 0;
+
+    /* ── Form Submit ────────────────────────────────────────── */
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const email     = document.getElementById('email').value.trim();
+        const password  = document.getElementById('password').value;
+        const courseUrl  = document.getElementById('courseUrl').value.trim();
+        const headless   = !document.getElementById('headedMode').checked;
+
+        if (!email || !password || !courseUrl) return;
+
+        // Reset UI
+        logConsole.innerHTML = '';
+        moduleNum = 0;
+        moduleCtr.textContent = 'Module #0';
+        moduleCtr.style.display = 'none';
+
+        // Show status
+        statusBar.classList.add('visible');
+        logPanel.classList.add('visible');
+        statusDot.className = 'status-dot';
+        statusText.textContent = 'Starting automation...';
+
+        startBtn.disabled = true;
+        startBtn.innerHTML = '⏳&nbsp; Running...';
+        stopBtn.style.display = 'block';
+
+        try {
+            const res = await fetch('/api/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password, course_url: courseUrl, headless }),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                addLog(data.error || 'Failed to start.', 'ERR');
+                resetUI();
+                return;
+            }
+
+            currentSessionId = data.session_id;
+            statusText.textContent = 'Connected — running automation...';
+            connectSSE(currentSessionId);
+
+        } catch (err) {
+            addLog('Network error: ' + err.message, 'ERR');
+            resetUI();
+        }
+    });
+
+    /* ── Stop Button ────────────────────────────────────────── */
+    stopBtn.addEventListener('click', async () => {
+        if (!currentSessionId) return;
+
+        try {
+            await fetch(`/api/stop/${currentSessionId}`, { method: 'POST' });
+            addLog('Automation stopped by user.', 'WARN');
+        } catch (e) {}
+
+        if (eventSource) eventSource.close();
+        resetUI();
+        statusDot.className = 'status-dot error';
+        statusText.textContent = 'Stopped';
+    });
+
+    /* ── Clear Logs ─────────────────────────────────────────── */
+    clearBtn.addEventListener('click', () => {
+        logConsole.innerHTML = '';
+    });
+
+    /* ── SSE Connection ─────────────────────────────────────── */
+    function connectSSE(sessionId) {
+        eventSource = new EventSource(`/api/logs/${sessionId}`);
+
+        eventSource.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+
+            if (data.type === 'heartbeat') return;
+
+            if (data.type === 'done') {
+                eventSource.close();
+                if (data.status === 'completed') {
+                    statusDot.className = 'status-dot success';
+                    statusText.textContent = 'Completed!';
+                } else {
+                    statusDot.className = 'status-dot error';
+                    statusText.textContent = data.status === 'error' ? 'Error occurred' : 'Stopped';
+                }
+                resetUI();
+                return;
+            }
+
+            // Regular log message
+            addLog(data.msg, data.level, data.time);
+
+            // Track module count
+            const moduleMatch = data.msg.match(/Module #(\d+)/);
+            if (moduleMatch) {
+                moduleNum = parseInt(moduleMatch[1]);
+                moduleCtr.textContent = `Module #${moduleNum}`;
+                moduleCtr.style.display = 'inline-block';
+            }
+
+            // Update status text based on level
+            if (data.level === 'VIDEO')  statusText.textContent = '🎬 Processing video...';
+            if (data.level === 'SCROLL') statusText.textContent = '📜 Scrolling content...';
+            if (data.level === 'NEXT')   statusText.textContent = '➡️ Moving to next module...';
+            if (data.level === 'STOP')   statusText.textContent = '🚨 Assessment detected!';
+            if (data.level === 'QUIZ') {
+                const qMatch = data.msg.match(/Question #(\d+)/);
+                if (qMatch) {
+                    statusText.textContent = `📝 Answering quiz Q${qMatch[1]}...`;
+                } else if (data.msg.includes('ASSESSMENT DETECTED')) {
+                    statusText.textContent = '🧠 Quiz detected — auto-answering...';
+                } else if (data.msg.includes('Submitting')) {
+                    statusText.textContent = '📤 Submitting assessment...';
+                } else if (data.msg.includes('completed')) {
+                    statusText.textContent = '✅ Quiz completed!';
+                }
+            }
+        };
+
+        eventSource.onerror = () => {
+            eventSource.close();
+            statusDot.className = 'status-dot error';
+            statusText.textContent = 'Connection lost';
+            resetUI();
+        };
+    }
+
+    /* ── Add Log Line ───────────────────────────────────────── */
+    function addLog(msg, level = 'INFO', time = null) {
+        const t = time || new Date().toLocaleTimeString('en-GB', { hour12: false });
+        const icon = ICONS[level] || '•';
+
+        const line = document.createElement('div');
+        line.className = `log-line ${level}`;
+        line.innerHTML = `
+            <span class="log-time">${t}</span>
+            <span class="log-icon">${icon}</span>
+            <span class="log-msg">${escapeHtml(msg)}</span>
+        `;
+        logConsole.appendChild(line);
+
+        // Auto-scroll to bottom
+        logConsole.scrollTop = logConsole.scrollHeight;
+    }
+
+    /* ── Reset UI ───────────────────────────────────────────── */
+    function resetUI() {
+        startBtn.disabled = false;
+        startBtn.innerHTML = '🚀&nbsp; Start Automation';
+        stopBtn.style.display = 'none';
+    }
+
+    /* ── Escape HTML ────────────────────────────────────────── */
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+    </script>
+</body>
+</html>
