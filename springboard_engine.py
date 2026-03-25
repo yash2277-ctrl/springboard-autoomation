@@ -86,8 +86,8 @@ class SpringboardAutomation:
                 field.fill(self.email)
                 self.log("Email entered (fallback) ✓", "OK")
             else:
-                self.log("Cannot find email field! Waiting 60s for manual login...", "ERR")
-                time.sleep(60)
+                self.log("Cannot find email field! Waiting 5s...", "ERR")
+                time.sleep(5)
                 return
 
         time.sleep(0.5)
@@ -103,8 +103,8 @@ class SpringboardAutomation:
             if pw_field:
                 pw_field.fill(self.password)
             else:
-                self.log("Cannot find password field!", "ERR")
-                time.sleep(60)
+                self.log("Cannot find password field! Waiting 5s...", "ERR")
+                time.sleep(5)
                 return
 
         time.sleep(0.5)
