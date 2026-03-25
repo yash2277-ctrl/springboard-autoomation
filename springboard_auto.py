@@ -110,10 +110,29 @@ def do_login(page):
             continue
 
     if not email_field:
-        log("Could not find the email input field. Pausing for manual login...", "ERR")
-        log("Please log in manually, then press ENTER in this terminal.", "WARN")
-        input(">>> Press ENTER after you have logged in manually... ")
-        return
+        log("Could not find the email input field.", "ERR")
+        if IS_CI:
+            log("Running in CI — waiting 10s and retrying login page...", "WARN")
+            take_debug_screenshot(page, "no_email_field")
+            time.sleep(10)
+            page.reload()
+            time.sleep(5)
+            # Try one more time to find email field
+            for selector in email_selectors:
+                try:
+                    field = page.locator(selector).first
+                    if field.is_visible(timeout=3000):
+                        email_field = field
+                        break
+                except Exception:
+                    continue
+            if not email_field:
+                log("Still cannot find email field in CI. Aborting.", "ERR")
+                return
+        else:
+            log("Please log in manually, then press ENTER in this terminal.", "WARN")
+            input(">>> Press ENTER after you have logged in manually... ")
+            return
 
     email_field.fill(USER_EMAIL)
     time.sleep(0.5)
