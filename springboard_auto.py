@@ -25,15 +25,18 @@ import g4f
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
 # ══════════════════════════════════════════════════════════════════════
-# ██  CONFIGURATION — EDIT THESE VALUES  ██
+# ██  CONFIGURATION — reads from env vars (GitHub Actions) or defaults ██
 # ══════════════════════════════════════════════════════════════════════
 
-USER_EMAIL    = "YOUR_EMAIL@example.com"
-USER_PASSWORD = "YOUR_PASSWORD"
-COURSE_URL    = "https://infyspringboard.onwingspan.com/web/en/app/toc/YOUR_COURSE_ID/overview"
+# Detect CI/GitHub Actions environment
+IS_CI = os.getenv("CI", "").lower() in ("true", "1") or os.getenv("GITHUB_ACTIONS", "").lower() == "true"
+
+USER_EMAIL    = os.getenv("SPRINGBOARD_EMAIL", "YOUR_EMAIL@example.com")
+USER_PASSWORD = os.getenv("SPRINGBOARD_PASSWORD", "YOUR_PASSWORD")
+COURSE_URL    = os.getenv("SPRINGBOARD_COURSE_URL", "https://infyspringboard.onwingspan.com/web/en/app/toc/YOUR_COURSE_ID/overview")
 
 # ── Advanced Settings ────────────────────────────────────────────────
-HEADLESS         = False    # Set True to run without visible browser
+HEADLESS         = True if IS_CI else False   # Always headless in CI
 DEFAULT_TIMEOUT  = 15000   # 15 seconds default timeout (ms)
 VIDEO_WAIT_SECS  = 10      # Seconds to wait after video "finishes" for server registration
 SCROLL_DWELL     = 5       # Seconds to stay at bottom of reading pages
@@ -212,10 +215,21 @@ def do_login(page):
     # If we're still on the login page, a CAPTCHA might have appeared
     if "login" in page.url.lower():
         log("Still on login page — CAPTCHA may have appeared!", "STOP")
-        log("Please solve the CAPTCHA and complete login, then press ENTER.", "WARN")
         take_debug_screenshot(page, "captcha_detected")
-        input(">>> Press ENTER after you have solved the CAPTCHA... ")
-        page.wait_for_load_state("networkidle")
+        if IS_CI:
+            log("Running in CI — retrying login after 10s wait...", "WARN")
+            time.sleep(10)
+            # Try clicking login again
+            try:
+                page.locator('#kc-login').click()
+                time.sleep(5)
+                page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
+        else:
+            log("Please solve the CAPTCHA and complete login, then press ENTER.", "WARN")
+            input(">>> Press ENTER after you have solved the CAPTCHA... ")
+            page.wait_for_load_state("networkidle")
 
     log("Login successful! ✨", "OK")
 
@@ -1372,10 +1386,15 @@ def main():
             take_debug_screenshot(page, "fatal_error")
             raise
         finally:
-            # Keep browser open for manual inspection
-            log("Script finished. Browser window stays open.", "INFO")
-            log("Press ENTER in terminal to close the browser.", "INFO")
-            input(">>> Press ENTER to close browser... ")
+            if IS_CI:
+                log("CI run complete. Closing browser.", "INFO")
+            else:
+                log("Script finished. Browser window stays open.", "INFO")
+                log("Press ENTER in terminal to close the browser.", "INFO")
+                try:
+                    input(">>> Press ENTER to close browser... ")
+                except EOFError:
+                    pass
             browser.close()
 
 

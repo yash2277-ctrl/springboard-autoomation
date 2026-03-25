@@ -1,0 +1,51 @@
+name: 🚀 Springboard Auto-Completion
+
+on:
+  # Run manually from the Actions tab
+  workflow_dispatch:
+    inputs:
+      course_url:
+        description: 'Full Springboard course URL (toc/overview link)'
+        required: true
+        type: string
+
+  # Or run on a schedule (e.g., every day at 6 AM IST = 00:30 UTC)
+  # Uncomment the lines below to enable scheduled runs:
+  # schedule:
+  #   - cron: '30 0 * * *'
+
+jobs:
+  automate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6 hour max (GitHub Actions limit)
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 📦 Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          playwright install chromium
+          playwright install-deps chromium
+
+      - name: 🤖 Run Springboard Automation
+        env:
+          SPRINGBOARD_EMAIL: ${{ secrets.SPRINGBOARD_EMAIL }}
+          SPRINGBOARD_PASSWORD: ${{ secrets.SPRINGBOARD_PASSWORD }}
+          SPRINGBOARD_COURSE_URL: ${{ github.event.inputs.course_url || secrets.SPRINGBOARD_COURSE_URL }}
+        run: python springboard_auto.py
+
+      - name: 📸 Upload debug screenshots (if any)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-screenshots
+          path: debug_screenshots/
+          if-no-files-found: ignore
