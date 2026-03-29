@@ -11,6 +11,7 @@ Fixed with REAL selectors from live Springboard exploration:
 
 import time
 import os
+import inspect
 from datetime import datetime
 import g4f
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
@@ -44,7 +45,18 @@ class SpringboardAutomation:
         self._running = False
 
     def log(self, msg, level="INFO"):
-        self._log(msg, level)
+        """Log with automatic source function context for frontend traceability."""
+        source = "unknown"
+        try:
+            caller = inspect.currentframe().f_back
+            source = caller.f_code.co_name if caller else "unknown"
+        except Exception:
+            source = "unknown"
+
+        if source and source not in ("log", "<module>"):
+            self._log(f"[{source}] {msg}", level)
+        else:
+            self._log(msg, level)
 
     # ═════════════════════════════════════════════════════════════
     #  LOGIN (Keycloak SSO)

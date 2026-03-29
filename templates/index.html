@@ -440,6 +440,17 @@
         .log-icon { flex-shrink: 0; }
 
         .log-msg { word-break: break-word; }
+        .log-src {
+            color: var(--accent-hover);
+            background: rgba(99, 102, 241, 0.12);
+            border: 1px solid rgba(99, 102, 241, 0.25);
+            border-radius: 6px;
+            padding: 1px 6px;
+            font-size: 11px;
+            line-height: 1.4;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
 
         .log-line.INFO .log-msg  { color: var(--text-secondary); }
         .log-line.OK .log-msg    { color: var(--success); }
@@ -735,7 +746,7 @@
             }
 
             // Regular log message
-            addLog(data.msg, data.level, data.time);
+            addLog(data.msg, data.level, data.time, data.source);
 
             // Track module count
             const moduleMatch = data.msg.match(/Module #(\d+)/);
@@ -773,15 +784,17 @@
     }
 
     /* ── Add Log Line ───────────────────────────────────────── */
-    function addLog(msg, level = 'INFO', time = null) {
+    function addLog(msg, level = 'INFO', time = null, source = null) {
         const t = time || new Date().toLocaleTimeString('en-GB', { hour12: false });
         const icon = ICONS[level] || '•';
+        const srcHtml = source ? `<span class="log-src">${escapeHtml(source)}</span>` : '';
 
         const line = document.createElement('div');
         line.className = `log-line ${level}`;
         line.innerHTML = `
             <span class="log-time">${t}</span>
             <span class="log-icon">${icon}</span>
+            ${srcHtml}
             <span class="log-msg">${escapeHtml(msg)}</span>
         `;
         logConsole.appendChild(line);

@@ -14,6 +14,7 @@ import os
 import sys
 import time
 import json
+import re
 import queue
 import threading
 import uuid
@@ -55,12 +56,27 @@ def start_automation():
     session_id = str(uuid.uuid4())[:8]
     log_queue = queue.Queue()
 
+    def push_log(msg, level):
+        source = None
+        clean_msg = msg
+        m = re.match(r"^\[([^\]]+)\]\s*(.*)$", msg)
+        if m:
+            source = m.group(1)
+            clean_msg = m.group(2)
+
+        log_queue.put({
+            "msg": clean_msg,
+            "level": level,
+            "time": datetime.now().strftime("%H:%M:%S"),
+            "source": source,
+        })
+
     engine = SpringboardAutomation(
         email=email,
         password=password,
         course_url=course_url,
         headless=headless,
-        log_callback=lambda msg, level: log_queue.put({"msg": msg, "level": level, "time": datetime.now().strftime("%H:%M:%S")}),
+        log_callback=push_log,
     )
 
     sessions[session_id] = {
@@ -74,10 +90,10 @@ def start_automation():
         try:
             engine.run()
             sessions[session_id]["status"] = "completed"
-            log_queue.put({"msg": "Automation finished!", "level": "OK", "time": datetime.now().strftime("%H:%M:%S")})
+            push_log("Automation finished!", "OK")
         except Exception as e:
             sessions[session_id]["status"] = "error"
-            log_queue.put({"msg": f"Fatal error: {e}", "level": "ERR", "time": datetime.now().strftime("%H:%M:%S")})
+            push_log(f"Fatal error: {e}", "ERR")
         finally:
             log_queue.put(None)  # Sentinel to close the SSE stream
 
