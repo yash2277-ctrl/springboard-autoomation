@@ -1559,3 +1559,28 @@ YOUR TASK:
                 self.log(f"Total modules processed: {self._module_count}", "INFO")
                 time.sleep(0.8)
                 browser.close()
+
+
+def run_from_env():
+    """Run the unified automation engine using environment variables."""
+    email = os.getenv("SPRINGBOARD_EMAIL", "")
+    password = os.getenv("SPRINGBOARD_PASSWORD", "")
+    course_url = os.getenv("SPRINGBOARD_COURSE_URL", "")
+    headless = os.getenv("SPRINGBOARD_HEADLESS", "false").lower() in ("1", "true", "yes")
+
+    if not email or not password or not course_url:
+        print("Missing env vars. Set SPRINGBOARD_EMAIL, SPRINGBOARD_PASSWORD, SPRINGBOARD_COURSE_URL")
+        return
+
+    engine = SpringboardAutomation(
+        email=email,
+        password=password,
+        course_url=course_url,
+        headless=headless,
+        log_callback=lambda msg, level: print(f"[{level}] {msg}"),
+    )
+    engine.run()
+
+
+if __name__ == "__main__":
+    run_from_env()
