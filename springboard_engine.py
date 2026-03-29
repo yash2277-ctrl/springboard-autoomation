@@ -248,20 +248,10 @@ class SpringboardAutomation:
         # Dismiss Zoiee again (it may reappear on navigation)
         self._dismiss_zoiee(page)
 
-        # Force restart from beginning
-        self.log("Trying to click first module in TOC to restart...", "INFO")
-        try:
-            first_module = page.locator('.toc-item, .node-title, .module-title, mat-expansion-panel-header').first
-            if first_module.is_visible(timeout=3000):
-                first_module.click()
-                time.sleep(2.0)
-        except Exception:
-            pass
-
         # Click Start / Resume button if still on overview
         start_selectors = [
             'button:has-text("Start")', 'button:has-text("Resume")',
-            'button:has-text("Continue")', 'button:has-text("Continue Course")',
+            'button:has-text("Continue Course")',
             'button:has-text("START")', 'button:has-text("RESUME")',
             'a:has-text("Start")', 'a:has-text("Resume")',
             '[class*="start-btn"]', '[class*="resume-btn"]',
@@ -275,18 +265,6 @@ class SpringboardAutomation:
                 pass
         else:
             self.log("No Start/Resume button — may already be in the player.", "WARN")
-            
-        # Inside player, force open TOC and click first item again to be absolutely sure
-        try:
-            page.locator('mat-icon:has-text("menu_book"), .toc-button').first.click(timeout=3000)
-            time.sleep(0.8)
-            page.evaluate("""() => {
-                const items = document.querySelectorAll('.toc-item, .node-title, .module-title');
-                if(items.length > 0) items[0].click();
-            }""")
-            time.sleep(1.5)
-        except Exception:
-            pass
 
         # Dismiss Zoiee once more inside the player
         self._dismiss_zoiee(page)
@@ -1710,16 +1688,29 @@ YOUR TASK:
             'button.navigation-btn-frwd',
             # mat-icon based
             'button:has(mat-icon:has-text("arrow_forward_ios"))',
-            'mat-icon:has-text("arrow_forward_ios")',
-            # Generic Next buttons
+            # Generic Next buttons inside player
             'button:has-text("Next")', 'button:has-text("NEXT")',
-            'button:has-text("Continue")',
-            'a:has-text("Next")',
             'button[aria-label="Next"]',
             # Mark as done
             'button:has-text("Mark as done")',
             'button:has-text("MARK AS DONE")',
         ]
+
+        # Only click player-scoped controls to avoid jumping to unrelated course links.
+        for sel in next_selectors:
+            try:
+                btn = page.locator(sel).first
+                if btn.is_visible(timeout=1500) and btn.is_enabled(timeout=1000):
+                    container_ok = btn.locator("xpath=ancestor::*[contains(@class,'navigation') or contains(@class,'player') or contains(@class,'content')] ").count() > 0
+                    if container_ok or sel in ('.navigation-btn-frwd', 'button.navigation-btn-frwd', 'button:has(mat-icon:has-text("arrow_forward_ios"))'):
+                        btn.click()
+                        self.log("Clicked Next ➡️", "NEXT")
+                        time.sleep(self.MODULE_LOAD_WAIT)
+                        return True
+            except Exception:
+                continue
+
+        # Fallback attempt with generic click helper
         if self._click_first(page, next_selectors):
             self.log("Clicked Next ➡️", "NEXT")
             time.sleep(self.MODULE_LOAD_WAIT)
