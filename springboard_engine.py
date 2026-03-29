@@ -1465,15 +1465,27 @@ YOUR TASK:
                     "--start-maximized",
                 ],
             )
-            context = browser.new_context(
-                viewport={"width": 1366, "height": 768},
-                permissions=["window-placement"],
-                user_agent=(
+            context_kwargs = {
+                "viewport": {"width": 1366, "height": 768},
+                "permissions": ["window-placement"],
+                "user_agent": (
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                     "AppleWebKit/537.36 (KHTML, like Gecko) "
                     "Chrome/125.0.0.0 Safari/537.36"
                 ),
-            )
+            }
+
+            # Some Playwright/browser builds do not support window-placement permission.
+            # Fall back gracefully instead of crashing the whole run.
+            try:
+                context = browser.new_context(**context_kwargs)
+            except Exception as e:
+                if "Unknown permission" in str(e) and "window-placement" in str(e):
+                    self.log("window-placement permission unsupported; continuing without it.", "WARN")
+                    context_kwargs.pop("permissions", None)
+                    context = browser.new_context(**context_kwargs)
+                else:
+                    raise
             context.set_default_timeout(15000)
 
             # Apply anti-tab-switch detection bypass globally on every page/frame.
