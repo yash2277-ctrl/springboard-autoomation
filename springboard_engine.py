@@ -291,6 +291,11 @@ class SpringboardAutomation:
         targets = [("main", page)] + [(f"frame #{i}", frame) for i, frame in enumerate(page.frames)]
         for label, target in targets:
             try:
+                try:
+                    target.wait_for_selector("video", timeout=30000)
+                except Exception:
+                    pass
+
                 video_el = target.locator("video").first
                 if video_el.is_visible(timeout=2000):
                     self.log(f"Found <video> in {label}", "VIDEO")
@@ -311,7 +316,7 @@ class SpringboardAutomation:
                     )
 
                     if duration and duration > 0:
-                        self.log(f"Video: {duration:.0f}s — playing for {self.VIDEO_HEARTBEAT_WAIT}s, jumping to end-1s...", "VIDEO")
+                        self.log("Tapping center play and waiting for natural playback (10s)...", "VIDEO")
 
                         # Tap the visible play button again right before playback,
                         # so platforms that require a real user click can start video.
@@ -325,14 +330,16 @@ class SpringboardAutomation:
                             v.play();
                         }}""")
 
-                        # Wait long enough so LMS heartbeat marks the video as started
-                        time.sleep(float(self.VIDEO_HEARTBEAT_WAIT))
+                        # Must naturally reach at least 10s before skipping.
+                        if not self._wait_video_natural_progress(target, min_seconds=10, timeout_seconds=40):
+                            self.log("Video did not progress to 10s naturally; retrying module.", "WARN")
+                            return False
 
-                        # Skip to 1 second before end to ensure it completes
+                        # Last-mile rule: do not jump to exact end.
                         target.evaluate("""() => {
                             const v = document.querySelector('video');
-                            if (v && v.currentTime < v.duration - 1) {
-                                v.currentTime = v.duration - 1;
+                            if (v && v.currentTime < v.duration - 5) {
+                                v.currentTime = v.duration - 5;
                                 v.play();
                             }
                         }""")
@@ -345,7 +352,7 @@ class SpringboardAutomation:
                             done = target.evaluate("""() => {
                                 const v = document.querySelector('video');
                                 if (!v || !v.duration) return false;
-                                return v.currentTime >= v.duration - 1;
+                                return v.currentTime >= v.duration - 5;
                             }""")
                             if not done:
                                 self.log("Video did not reach end yet; retrying module on next loop.", "WARN")
@@ -371,8 +378,8 @@ class SpringboardAutomation:
                 return false;
             }""")
             if has_shadow:
-                self.log(f"Found video in Shadow DOM — playing for {self.VIDEO_HEARTBEAT_WAIT}s then skipping", "VIDEO")
-                page.evaluate("""(ms) => {
+                self.log("Found video in Shadow DOM — tapping play and waiting natural 10s", "VIDEO")
+                page.evaluate("""() => {
                     // Try to click any shadow UI play buttons FIRST
                     for (const el of document.querySelectorAll('*')) {
                         if (el.shadowRoot) {
@@ -387,19 +394,24 @@ class SpringboardAutomation:
                             if (v) {
                                 v.muted = true; v.currentTime = 0;
                                 v.play();
-                                setTimeout(() => {
-                                    if (v && v.currentTime < v.duration - 1) {
-                                        v.currentTime = v.duration - 1;
-                                        v.play();
-                                    }
-                                }, ms);
                                 return;
                             }
                         }
                     }
-                }""", int(self.VIDEO_HEARTBEAT_WAIT * 1000))
-                # Wait for heartbeat interval and completion sync
-                time.sleep(float(self.VIDEO_HEARTBEAT_WAIT) + 3.0)
+                }""")
+                time.sleep(10.0)
+                page.evaluate("""() => {
+                    for (const el of document.querySelectorAll('*')) {
+                        if (!el.shadowRoot) continue;
+                        const v = el.shadowRoot.querySelector('video');
+                        if (v && v.duration && v.currentTime < v.duration - 5) {
+                            v.currentTime = v.duration - 5;
+                            v.play();
+                            return;
+                        }
+                    }
+                }""")
+                time.sleep(3.0)
                 return True
         except Exception:
             pass
@@ -476,6 +488,36 @@ class SpringboardAutomation:
 
         if clicked_any:
             self.log("Tapped visible video play button", "VIDEO")
+
+    def _wait_video_natural_progress(self, target, min_seconds=10, timeout_seconds=40):
+        """Wait until video naturally reaches min_seconds of playback progress."""
+        start = time.time()
+        while time.time() - start < timeout_seconds:
+            try:
+                progressed = target.evaluate(
+                    """(minSec) => {
+                        const v = document.querySelector('video');
+                        if (!v) return false;
+                        return v.currentTime >= minSec;
+                    }""",
+                    min_seconds,
+                )
+                if progressed:
+                    return True
+            except Exception:
+                pass
+
+            try:
+                target.evaluate("""() => {
+                    const v = document.querySelector('video');
+                    if (v && v.paused) v.play();
+                }""")
+            except Exception:
+                pass
+
+            time.sleep(1.0)
+
+        return False
 
     def _has_video_context(self, page):
         """Detect if current module likely contains a video to avoid accidental skipping."""
@@ -1114,7 +1156,7 @@ YOUR TASK:
                     # The loop will naturally break when option_found is False 3 times.
 
                 # Wait for next question to load
-                time.sleep(1.0)
+                time.sleep(1.5)
                 try:
                     page.wait_for_load_state("networkidle", timeout=5000)
                 except PlaywrightTimeout:
@@ -1315,6 +1357,8 @@ YOUR TASK:
                 el.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
                 el.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
                 el.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+                el.dispatchEvent(new Event('change', {bubbles: true}));
+                el.dispatchEvent(new Event('input', {bubbles: true}));
 
                 const inner = el.querySelector('.mat-radio-container, .mat-radio-inner-circle, .mat-radio-outer-circle');
                 if (inner) { inner.click(); inner.dispatchEvent(new MouseEvent('click', {bubbles: true})); }
@@ -1427,11 +1471,60 @@ YOUR TASK:
                     if btn.is_visible(timeout=1500) and btn.is_enabled(timeout=800):
                         btn.click()
                         self.log("  Clicked Save & Next ✓", "NEXT")
-                        time.sleep(0.8)
+                        time.sleep(1.5)
                         return True
                 except Exception:
                     continue
         return False
+
+    def _all_questions_answered(self, page):
+        """Best-effort check for question palette/grid state before final submit."""
+        js = """() => {
+            const candidates = document.querySelectorAll(
+                '.question-palette button, .palette button, .question-grid button, ' +
+                '.question-number, .qno, .number-circle, [class*="question"][class*="number"]'
+            );
+
+            if (!candidates || candidates.length === 0) return { known: false, allAnswered: true, total: 0 };
+
+            let unanswered = 0;
+            for (const el of candidates) {
+                const cls = (el.className || '').toString().toLowerCase();
+                const aria = (el.getAttribute('aria-label') || '').toLowerCase();
+                const title = (el.getAttribute('title') || '').toLowerCase();
+                const text = (el.innerText || '').toLowerCase();
+                const combined = `${cls} ${aria} ${title} ${text}`;
+
+                if (
+                    combined.includes('unanswered') ||
+                    combined.includes('not answered') ||
+                    combined.includes('not-answered') ||
+                    combined.includes('not visited') ||
+                    combined.includes('not-visited') ||
+                    combined.includes('pending') ||
+                    combined.includes('grey') ||
+                    combined.includes('gray')
+                ) {
+                    unanswered += 1;
+                }
+            }
+
+            return { known: true, allAnswered: unanswered === 0, total: candidates.length };
+        }"""
+
+        targets = [page] + list(page.frames)
+        for target in targets:
+            try:
+                info = target.evaluate(js)
+                if info.get("known"):
+                    if not info.get("allAnswered"):
+                        self.log(f"Question palette shows unanswered items ({info.get('total')} total)", "WARN")
+                    return bool(info.get("allAnswered"))
+            except Exception:
+                continue
+
+        # Unknown palette structure: don't block submission.
+        return True
 
     def _submit_assessment(self, page):
         """Submit the assessment and handle confirmation dialogs."""
@@ -1446,6 +1539,15 @@ YOUR TASK:
 
         submitted = False
         targets = [page] + list(page.frames)
+
+        # Final check: try to clear unanswered markers before submitting.
+        for _ in range(8):
+            if self._all_questions_answered(page):
+                break
+            advanced = self._click_save_next(page)
+            if not advanced:
+                break
+            time.sleep(1.5)
 
         # If submit is not visible yet, keep advancing until final page appears.
         for _ in range(12):
@@ -1469,7 +1571,7 @@ YOUR TASK:
             self._handle_warning_and_fullscreen(page)
             if not advanced:
                 break
-            time.sleep(0.8)
+            time.sleep(1.5)
 
         for target in targets:
             if self._click_first_target(target, submit_selectors):
@@ -1526,6 +1628,63 @@ YOUR TASK:
                         return True
             except Exception:
                 continue
+        return False
+
+    def _current_sidebar_item_completed(self, page):
+        """Best-effort check whether active TOC item appears completed."""
+        try:
+            info = page.evaluate("""() => {
+                const active = document.querySelector('.toc-item.active, .node-title.active, .module-title.active, [aria-current="true"]');
+                if (!active) return { known: false, completed: true };
+                const txt = (active.innerText || '').toLowerCase();
+                const html = (active.innerHTML || '').toLowerCase();
+                const completed = html.includes('check') || txt.includes('completed');
+                const explicitIncomplete = txt.includes('incomplete');
+                return { known: true, completed: completed && !explicitIncomplete };
+            }""")
+            return (not info.get("known")) or bool(info.get("completed"))
+        except Exception:
+            return True
+
+    def _force_sidebar_refresh(self, page):
+        """Force sidebar UI refresh by clicking refresh/toggle controls."""
+        refresh_selectors = [
+            'mat-icon:has-text("refresh")',
+            'button:has-text("Refresh")',
+            'button[aria-label*="Refresh"]',
+            '[class*="refresh"]',
+        ]
+
+        self._click_first(page, refresh_selectors)
+
+        # Collapse/expand TOC to refresh status rendering.
+        try:
+            toc = page.locator('mat-icon:has-text("menu_book"), .toc-button').first
+            if toc.is_visible(timeout=1200):
+                toc.click()
+                time.sleep(0.5)
+                toc.click()
+                time.sleep(0.5)
+        except Exception:
+            pass
+
+    def _wait_for_completion_or_recover(self, page, wait_seconds=20):
+        """Wait for sidebar completion update; refresh/retry if stuck too long."""
+        start = time.time()
+        while time.time() - start < wait_seconds:
+            if self._current_sidebar_item_completed(page):
+                return True
+            time.sleep(1.0)
+
+        self.log("Module appears stuck (no completion update). Refreshing and retrying.", "WARN")
+        self._force_sidebar_refresh(page)
+        try:
+            page.reload(wait_until="domcontentloaded")
+            page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
+        self._dismiss_zoiee(page)
+        self._handle_warning_and_fullscreen(page)
         return False
 
     # ═════════════════════════════════════════════════════════════
@@ -1675,6 +1834,8 @@ YOUR TASK:
                     # Check for assessment
                     if self._is_assessment(page):
                         self._handle_assessment(page)
+                        if not self._wait_for_completion_or_recover(page, wait_seconds=20):
+                            continue
                         self._handle_popups(page)
                         time.sleep(0.8)
                         if not self._click_next(page):
@@ -1686,6 +1847,8 @@ YOUR TASK:
 
                     # Try video
                     if self._handle_video(page):
+                        if not self._wait_for_completion_or_recover(page, wait_seconds=20):
+                            continue
                         self._handle_popups(page)
                         if not self._click_next(page):
                             self.log("No Next after video", "WARN")
