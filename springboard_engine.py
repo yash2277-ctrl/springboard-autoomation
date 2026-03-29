@@ -286,20 +286,7 @@ class SpringboardAutomation:
         self.log("Scanning for video elements...", "VIDEO")
 
         # Press UI Play buttons FIRST to bypass browser Autoplay policies
-        play_selectors = ['.vjs-big-play-button', 'button.vjs-play-control', '.play-button', '[title="Play"]', 'button:has-text("Play")', 'mat-icon:has-text("play_arrow")']
-        try:
-            for s in play_selectors:
-                if page.locator(s).first.is_visible(timeout=500):
-                    page.locator(s).first.click(force=True)
-                    time.sleep(0.5)
-            for frame in page.frames:
-                for s in play_selectors:
-                    try:
-                        if frame.locator(s).first.is_visible(timeout=500):
-                            frame.locator(s).first.click(force=True)
-                            time.sleep(0.5)
-                    except: pass
-        except: pass
+        self._tap_video_play_buttons(page)
 
         targets = [("main", page)] + [(f"frame #{i}", frame) for i, frame in enumerate(page.frames)]
         for label, target in targets:
@@ -325,6 +312,10 @@ class SpringboardAutomation:
 
                     if duration and duration > 0:
                         self.log(f"Video: {duration:.0f}s — playing for {self.VIDEO_HEARTBEAT_WAIT}s, jumping to end-1s...", "VIDEO")
+
+                        # Tap the visible play button again right before playback,
+                        # so platforms that require a real user click can start video.
+                        self._tap_video_play_buttons(page)
 
                         target.evaluate(f"""() => {{
                             const v = document.querySelector('video');
@@ -414,6 +405,77 @@ class SpringboardAutomation:
             pass
 
         return False
+
+    def _tap_video_play_buttons(self, page):
+        """Tap/click visible video play controls on main page and in frames."""
+        play_selectors = [
+            '.vjs-big-play-button',
+            'button.vjs-play-control',
+            '.play-button',
+            '.ytp-large-play-button',
+            '.jw-icon-playback',
+            '[title="Play"]',
+            '[aria-label="Play"]',
+            '[aria-label*="Play"]',
+            'button:has-text("Play")',
+            'mat-icon:has-text("play_arrow")',
+            '[class*="play"]',
+        ]
+
+        targets = [page] + list(page.frames)
+        clicked_any = False
+
+        for target in targets:
+            for sel in play_selectors:
+                try:
+                    btn = target.locator(sel).first
+                    if btn.is_visible(timeout=400):
+                        btn.click(force=True)
+                        clicked_any = True
+                        time.sleep(0.25)
+                except Exception:
+                    continue
+
+            # JS fallback for custom overlays where selector-based click misses
+            try:
+                did_js_click = target.evaluate("""() => {
+                    const selectors = [
+                        '.vjs-big-play-button',
+                        '.ytp-large-play-button',
+                        '.jw-icon-playback',
+                        '[aria-label="Play"]',
+                        '[aria-label*="Play"]',
+                        '[title="Play"]',
+                        'button[title*="Play"]',
+                        '.play-button',
+                        '[class*="play"]'
+                    ];
+
+                    for (const s of selectors) {
+                        const el = document.querySelector(s);
+                        if (el && el.offsetParent !== null) {
+                            el.click();
+                            el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+                            return true;
+                        }
+                    }
+
+                    const v = document.querySelector('video');
+                    if (v) {
+                        v.click();
+                        v.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+                        return true;
+                    }
+
+                    return false;
+                }""")
+                if did_js_click:
+                    clicked_any = True
+            except Exception:
+                continue
+
+        if clicked_any:
+            self.log("Tapped visible video play button", "VIDEO")
 
     def _has_video_context(self, page):
         """Detect if current module likely contains a video to avoid accidental skipping."""
