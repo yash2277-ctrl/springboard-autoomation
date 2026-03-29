@@ -301,14 +301,15 @@ class SpringboardAutomation:
                     except: pass
         except: pass
 
-        for i, frame in enumerate(page.frames):
+        targets = [("main", page)] + [(f"frame #{i}", frame) for i, frame in enumerate(page.frames)]
+        for label, target in targets:
             try:
-                video_el = frame.locator("video").first
+                video_el = target.locator("video").first
                 if video_el.is_visible(timeout=2000):
-                    self.log(f"Found <video> in frame #{i}", "VIDEO")
+                    self.log(f"Found <video> in {label}", "VIDEO")
 
                     # Wait for metadata to load
-                    frame.evaluate("""() => {
+                    target.evaluate("""() => {
                         return new Promise(r => {
                             const v = document.querySelector('video');
                             if (!v) return r(false);
@@ -318,14 +319,14 @@ class SpringboardAutomation:
                         });
                     }""")
 
-                    duration = frame.evaluate(
+                    duration = target.evaluate(
                         "() => { const v = document.querySelector('video'); return v ? v.duration : 0; }"
                     )
 
                     if duration and duration > 0:
                         self.log(f"Video: {duration:.0f}s — playing for {self.VIDEO_HEARTBEAT_WAIT}s, jumping to end-1s...", "VIDEO")
 
-                        frame.evaluate(f"""() => {{
+                        target.evaluate(f"""() => {{
                             const v = document.querySelector('video');
                             if (!v) return;
                             v.muted = true; v.volume = 0;
@@ -337,7 +338,7 @@ class SpringboardAutomation:
                         time.sleep(float(self.VIDEO_HEARTBEAT_WAIT))
 
                         # Skip to 1 second before end to ensure it completes
-                        frame.evaluate("""() => {
+                        target.evaluate("""() => {
                             const v = document.querySelector('video');
                             if (v && v.currentTime < v.duration - 1) {
                                 v.currentTime = v.duration - 1;
@@ -348,12 +349,25 @@ class SpringboardAutomation:
                         # Give enough time for ended event + server sync
                         time.sleep(3.0)
 
+                        # Verify completion progressed to avoid false "handled" state
+                        try:
+                            done = target.evaluate("""() => {
+                                const v = document.querySelector('video');
+                                if (!v || !v.duration) return false;
+                                return v.currentTime >= v.duration - 1;
+                            }""")
+                            if not done:
+                                self.log("Video did not reach end yet; retrying module on next loop.", "WARN")
+                                return False
+                        except Exception:
+                            pass
+
                         self.log("Video skipped to end! ✅", "OK")
                         return True
                     else:
-                        self.log("Video found but no duration — waiting 10s...", "WARN")
-                        time.sleep(5.0)
-                        return True
+                        self.log("Video found but no duration metadata yet — will retry.", "WARN")
+                        time.sleep(2.0)
+                        return False
             except Exception:
                 continue
 
@@ -395,6 +409,31 @@ class SpringboardAutomation:
                 }""", int(self.VIDEO_HEARTBEAT_WAIT * 1000))
                 # Wait for heartbeat interval and completion sync
                 time.sleep(float(self.VIDEO_HEARTBEAT_WAIT) + 3.0)
+                return True
+        except Exception:
+            pass
+
+        return False
+
+    def _has_video_context(self, page):
+        """Detect if current module likely contains a video to avoid accidental skipping."""
+        try:
+            if page.locator("video").first.is_visible(timeout=700):
+                return True
+        except Exception:
+            pass
+
+        for frame in page.frames:
+            try:
+                if frame.locator("video").first.is_visible(timeout=700):
+                    return True
+            except Exception:
+                continue
+
+        try:
+            body = page.inner_text("body", timeout=1200).lower()
+            hints = ["video", "watch", "duration", "playback"]
+            if any(h in body for h in hints):
                 return True
         except Exception:
             pass
@@ -1345,6 +1384,31 @@ YOUR TASK:
 
         submitted = False
         targets = [page] + list(page.frames)
+
+        # If submit is not visible yet, keep advancing until final page appears.
+        for _ in range(12):
+            has_submit = False
+            for target in targets:
+                for sel in submit_selectors:
+                    try:
+                        btn = target.locator(sel).first
+                        if btn.is_visible(timeout=500) and btn.is_enabled(timeout=500):
+                            has_submit = True
+                            break
+                    except Exception:
+                        continue
+                if has_submit:
+                    break
+
+            if has_submit:
+                break
+
+            advanced = self._click_save_next(page)
+            self._handle_warning_and_fullscreen(page)
+            if not advanced:
+                break
+            time.sleep(0.8)
+
         for target in targets:
             if self._click_first_target(target, submit_selectors):
                 self.log("Clicked Submit Assessment ✓", "OK")
@@ -1365,6 +1429,25 @@ YOUR TASK:
                     if self._click_first_target(target, confirm_selectors):
                         self.log("Clicked confirmation ✓", "OK")
                         break
+
+            # Post-submit: often there is a score/result screen requiring one more action.
+            result_continue = [
+                'button:has-text("Continue")',
+                'button:has-text("Back to Course")',
+                'button:has-text("Done")',
+                'button:has-text("Close")',
+                'a:has-text("Back to Course")',
+            ]
+            for _ in range(4):
+                time.sleep(1.0)
+                clicked_any = False
+                for target in targets:
+                    if self._click_first_target(target, result_continue):
+                        self.log("Moved past assessment result screen ✓", "OK")
+                        clicked_any = True
+                        break
+                if not clicked_any:
+                    break
         else:
             self.log("No Submit button found — quiz may auto-submit", "WARN")
 
@@ -1372,10 +1455,13 @@ YOUR TASK:
         """Click the first visible+enabled element from selectors on a page/frame."""
         for sel in selectors:
             try:
-                btn = target.locator(sel).first
-                if btn.is_visible(timeout=1200) and btn.is_enabled(timeout=800):
-                    btn.click()
-                    return True
+                locator = target.locator(sel)
+                count = min(locator.count(), 4)
+                for i in range(count):
+                    btn = locator.nth(i)
+                    if btn.is_visible(timeout=1200) and btn.is_enabled(timeout=800):
+                        btn.click()
+                        return True
             except Exception:
                 continue
         return False
@@ -1541,6 +1627,13 @@ YOUR TASK:
                         self._handle_popups(page)
                         if not self._click_next(page):
                             self.log("No Next after video", "WARN")
+                        continue
+
+                    # Guard: if this looks like a video module but playback wasn't handled,
+                    # do not skip to next immediately.
+                    if self._has_video_context(page):
+                        self.log("Video context detected but not completed yet; retrying this module.", "WARN")
+                        time.sleep(2.0)
                         continue
 
                     # Try coding (always click play if it's there)
