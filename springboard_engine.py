@@ -977,10 +977,14 @@ YOUR TASK:
         """Check if the current page is an assessment/quiz section.
         Checks main page AND all iframes for quiz indicators."""
         assessment_keywords = ["assessment", "quiz", "exam", "test"]
+        strong_assessment_text = ["submit assessment", "save & next", "save and next", "take assessment", "start assessment", "finish test"]
 
         # Strategy 1: Check URL for quiz/assessment patterns
         try:
             url = page.url.lower()
+            # Explicitly avoid classifying video player pages as assessments.
+            if "viewer/video" in url or "/video/" in url:
+                return False
             if any(kw in url for kw in ["quiz", "assessment", "exam"]):
                 self.log("Assessment detected via URL pattern", "INFO")
                 return True
@@ -1018,6 +1022,8 @@ YOUR TASK:
             'text="Submit Assessment"',
             'text="Save & Next"',
             'text="Save and Next"',
+            'button:has-text("Finish Test")',
+            'button:has-text("Take Assessment")',
             'mat-radio-button',
             'mat-radio-group',
             '[role="radiogroup"]',
@@ -1038,14 +1044,15 @@ YOUR TASK:
         try:
             for frame in page.frames:
                 try:
-                    has_quiz_elements = frame.evaluate("""() => {
+                    has_quiz_elements = frame.evaluate("""(strongHints) => {
                         const radios = document.querySelectorAll('mat-radio-button, input[type="radio"], [role="radio"]');
-                        const checkboxes = document.querySelectorAll('mat-checkbox, input[type="checkbox"]');
+                        const bodyText = (document.body && document.body.innerText ? document.body.innerText : '').toLowerCase();
                         const saveNext = Array.from(document.querySelectorAll('button')).filter(b => 
                             b.innerText && (b.innerText.includes('Save') || b.innerText.includes('Submit') || b.innerText.includes('Next'))
                         );
-                        return radios.length >= 2 || (checkboxes.length >= 2 && saveNext.length > 0);
-                    }""")
+                        const hasStrongText = strongHints.some(h => bodyText.includes(h));
+                        return radios.length >= 2 && saveNext.length > 0 && hasStrongText;
+                    }""", strong_assessment_text)
                     if has_quiz_elements:
                         self.log(f"Assessment detected via JS scan in frame: {frame.url[:60]}", "INFO")
                         return True
@@ -1834,6 +1841,19 @@ YOUR TASK:
                     self._dismiss_zoiee(page)
                     self._handle_warning_and_fullscreen(page)
 
+                    # Prioritize video handling first to avoid false quiz detection on player pages.
+                    if self._has_video_context(page):
+                        if self._handle_video(page):
+                            if not self._wait_for_completion_or_recover(page, wait_seconds=20):
+                                continue
+                            self._handle_popups(page)
+                            if not self._click_next(page):
+                                self.log("No Next after video", "WARN")
+                            continue
+                        self.log("Video context detected but not completed yet; retrying this module.", "WARN")
+                        time.sleep(2.0)
+                        continue
+
                     # Check for assessment
                     if self._is_assessment(page):
                         self._handle_assessment(page)
@@ -1847,22 +1867,6 @@ YOUR TASK:
 
                     # Handle popups
                     self._handle_popups(page)
-
-                    # Try video
-                    if self._handle_video(page):
-                        if not self._wait_for_completion_or_recover(page, wait_seconds=20):
-                            continue
-                        self._handle_popups(page)
-                        if not self._click_next(page):
-                            self.log("No Next after video", "WARN")
-                        continue
-
-                    # Guard: if this looks like a video module but playback wasn't handled,
-                    # do not skip to next immediately.
-                    if self._has_video_context(page):
-                        self.log("Video context detected but not completed yet; retrying this module.", "WARN")
-                        time.sleep(2.0)
-                        continue
 
                     # Try coding (always click play if it's there)
                     self._handle_coding(page)
