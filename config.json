@@ -1,0 +1,7 @@
+{
+    "login_url": "https://infyspringboard.onwingspan.com/web/en/login",
+    "course_url": "YOUR_COURSE_URL_HERE",
+    "email": "YOUR_EMAIL_HERE",
+    "password": "YOUR_PASSWORD_HERE",
+    "openai_api_key": ""
+}

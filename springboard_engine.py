@@ -16,6 +16,13 @@ import g4f
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
 
+VISIBILITY_HACK = """
+Object.defineProperty(document, 'visibilityState', { value: 'visible', writable: false });
+Object.defineProperty(document, 'hidden', { value: false, writable: false });
+window.addEventListener('visibilitychange', (e) => e.stopImmediatePropagation(), true);
+"""
+
+
 class SpringboardAutomation:
 
     LANDING_URL = "https://infyspringboard.onwingspan.com/web/en/login"
@@ -29,6 +36,7 @@ class SpringboardAutomation:
         self._running = True
         self._module_count = 0
         self.VIDEO_WAIT = 10
+        self.VIDEO_HEARTBEAT_WAIT = 7
         self.SCROLL_DWELL = 5
         self.MODULE_LOAD_WAIT = 4
 
@@ -315,7 +323,7 @@ class SpringboardAutomation:
                     )
 
                     if duration and duration > 0:
-                        self.log(f"Video: {duration:.0f}s — playing for 4s, jumping to end-3s...", "VIDEO")
+                        self.log(f"Video: {duration:.0f}s — playing for {self.VIDEO_HEARTBEAT_WAIT}s, jumping to end-1s...", "VIDEO")
 
                         frame.evaluate(f"""() => {{
                             const v = document.querySelector('video');
@@ -325,20 +333,20 @@ class SpringboardAutomation:
                             v.play();
                         }}""")
 
-                        # Wait 4 seconds
-                        time.sleep(2.0)
+                        # Wait long enough so LMS heartbeat marks the video as started
+                        time.sleep(float(self.VIDEO_HEARTBEAT_WAIT))
 
-                        # Skip to 3 seconds before end
+                        # Skip to 1 second before end to ensure it completes
                         frame.evaluate("""() => {
                             const v = document.querySelector('video');
-                            if (v && v.currentTime < v.duration - 3) {
-                                v.currentTime = v.duration - 3;
+                            if (v && v.currentTime < v.duration - 1) {
+                                v.currentTime = v.duration - 1;
                                 v.play();
                             }
                         }""")
                         
-                        # Wait 4 seconds to finish the rest
-                        time.sleep(2.0)
+                        # Give enough time for ended event + server sync
+                        time.sleep(3.0)
 
                         self.log("Video skipped to end! ✅", "OK")
                         return True
@@ -358,8 +366,8 @@ class SpringboardAutomation:
                 return false;
             }""")
             if has_shadow:
-                self.log("Found video in Shadow DOM — playing for 5s then skipping", "VIDEO")
-                page.evaluate("""() => {
+                self.log(f"Found video in Shadow DOM — playing for {self.VIDEO_HEARTBEAT_WAIT}s then skipping", "VIDEO")
+                page.evaluate("""(ms) => {
                     // Try to click any shadow UI play buttons FIRST
                     for (const el of document.querySelectorAll('*')) {
                         if (el.shadowRoot) {
@@ -375,17 +383,18 @@ class SpringboardAutomation:
                                 v.muted = true; v.currentTime = 0;
                                 v.play();
                                 setTimeout(() => {
-                                    if (v.currentTime < v.duration - 1) {
+                                    if (v && v.currentTime < v.duration - 1) {
                                         v.currentTime = v.duration - 1;
                                         v.play();
                                     }
-                                }, 5000);
+                                }, ms);
                                 return;
                             }
                         }
                     }
-                }""")
-                time.sleep(5.0)
+                }""", int(self.VIDEO_HEARTBEAT_WAIT * 1000))
+                # Wait for heartbeat interval and completion sync
+                time.sleep(float(self.VIDEO_HEARTBEAT_WAIT) + 3.0)
                 return True
         except Exception:
             pass
@@ -782,6 +791,52 @@ YOUR TASK:
                     pass
                 return
 
+    def _handle_warning_and_fullscreen(self, page):
+        """Dismiss warning/fullscreen modals and spoof fullscreen listeners via resize event."""
+        warning_texts = [
+            "accessible only on fullscreen",
+            "warning",
+            "switching tabs is not allowed",
+        ]
+        ok_selectors = [
+            'button:has-text("Ok")', 'button:has-text("OK")', 'button:has-text("Close")',
+            'button:has-text("Got it")', 'button:has-text("Continue")',
+        ]
+
+        targets = [page] + list(page.frames)
+        for target in targets:
+            try:
+                body_text = target.inner_text("body", timeout=1000).lower()
+            except Exception:
+                continue
+
+            if not any(t in body_text for t in warning_texts):
+                continue
+
+            self.log("Warning/fullscreen modal detected. Applying bypass...", "WARN")
+            for sel in ok_selectors:
+                try:
+                    btn = target.locator(sel).first
+                    if btn.is_visible(timeout=800):
+                        btn.click()
+                        time.sleep(0.6)
+                        break
+                except Exception:
+                    continue
+
+            try:
+                target.evaluate("window.dispatchEvent(new Event('resize'));")
+            except Exception:
+                pass
+
+            try:
+                page.evaluate("window.dispatchEvent(new Event('resize'));")
+            except Exception:
+                pass
+
+            self.log("Fullscreen listener spoofed with resize event", "OK")
+            return
+
     # ═════════════════════════════════════════════════════════════
     #  ASSESSMENT DETECTION
     # ═════════════════════════════════════════════════════════════
@@ -883,6 +938,9 @@ YOUR TASK:
         self.log("🧠 ASSESSMENT DETECTED — starting auto-completion...", "QUIZ")
         time.sleep(0.8)
 
+        # Pre-handle fullscreen/accessibility warning modal if it appears
+        self._handle_warning_and_fullscreen(page)
+
         # ── DOM Exploration: Log what we see ──────────────────────
         self._explore_quiz_dom(page)
 
@@ -904,6 +962,7 @@ YOUR TASK:
 
         # ── Step 3: Instructions popup (checkbox + Continue) ─────
         self._handle_instructions_popup(page)
+        self._handle_warning_and_fullscreen(page)
 
         # ── Step 4: Answer all MCQ questions ─────────────────────
         try:
@@ -946,10 +1005,12 @@ YOUR TASK:
 
                 # Click "Save & Next"
                 clicked_save = self._click_save_next(page)
+                self._handle_warning_and_fullscreen(page)
 
                 if not clicked_save:
-                    self.log("  No Save & Next button — may be last question", "WARN")
-                    break
+                    self.log("  No Save & Next button — might be single-page quiz or last question", "WARN")
+                    # Do not break here! If all questions are on one page, we just need to keep answering.
+                    # The loop will naturally break when option_found is False 3 times.
 
                 # Wait for next question to load
                 time.sleep(1.0)
@@ -1406,6 +1467,7 @@ YOUR TASK:
             )
             context = browser.new_context(
                 viewport={"width": 1366, "height": 768},
+                permissions=["window-placement"],
                 user_agent=(
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -1413,13 +1475,15 @@ YOUR TASK:
                 ),
             )
             context.set_default_timeout(15000)
-            page = context.new_page()
 
-            # Stealth
-            page.add_init_script("""
+            # Apply anti-tab-switch detection bypass globally on every page/frame.
+            context.add_init_script(VISIBILITY_HACK)
+            context.add_init_script("""
                 Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
                 delete window.__playwright; delete window.__pw_manual;
             """)
+
+            page = context.new_page()
 
             try:
                 # 1. Login
@@ -1446,6 +1510,7 @@ YOUR TASK:
 
                     # Dismiss Zoiee if it reappears
                     self._dismiss_zoiee(page)
+                    self._handle_warning_and_fullscreen(page)
 
                     # Check for assessment
                     if self._is_assessment(page):
